@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>桌面待办</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="widget" id="app">
+    <header class="titlebar" id="titlebar">
+      <span class="floating-icon-wrap" id="floating-icon-wrap" aria-label="打开任务框图" title="双击打开任务框图">
+        <img class="floating-icon" id="floating-icon" src="assets/floating-icon.png" alt="打开任务框图">
+      </span>
+      <span class="drag-handle" aria-hidden="true">⠿</span>
+      <h1 id="list-title">我的任务</h1>
+      <span class="task-count" id="task-count">0 未完成</span>
+      <button class="icon-button" id="pin-button" type="button" aria-label="切换始终置顶" title="切换始终置顶">◇</button>
+      <button class="icon-button" id="lock-button" type="button" aria-label="锁定位置" title="锁定位置">♙</button>
+      <button class="icon-button" id="settings-button" type="button" aria-label="设置" title="设置">⋯</button>
+      <button class="icon-button" id="compact-button" type="button" aria-label="缩小为悬浮条" title="缩小为悬浮条">—</button>
+      <button class="icon-button" id="hide-button" type="button" aria-label="隐藏">×</button>
+    </header>
+
+    <nav class="list-tabs" id="list-tabs" aria-label="任务清单"></nav>
+
+    <form class="quick-add" id="quick-add" hidden>
+      <span aria-hidden="true">＋</span>
+      <input id="quick-add-input" maxlength="200" autocomplete="off" placeholder="添加任务，按 Enter 保存">
+    </form>
+
+    <section class="task-board" id="task-board" aria-live="polite"></section>
+
+    <footer class="statusbar">
+      <button class="text-button" id="add-group-button" type="button">＋ 分组</button>
+      <span id="save-status">本地保存</span>
+      <button class="text-button" id="undo-delete" type="button" hidden>撤销删除</button>
+      <button class="text-button" id="open-trash" type="button">回收站</button>
+      <button class="text-button" id="completed-toggle" type="button">显示已完成</button>
+    </footer>
+
+    <section class="settings-popover" id="settings-popover" hidden>
+      <label><span>窗口模式</span><select id="window-mode"><option value="desktop">普通层</option><option value="top">始终置顶</option></select></label>
+      <label><span>透明度</span><input id="opacity-range" type="range" min="55" max="100" value="94"></label>
+      <label><span>完成效果</span><select id="completed-behavior"><option value="keep">划线并置底</option><option value="hide">自动隐藏</option></select></label>
+      <label class="settings-switch"><span>开机自启动</span><input id="startup-toggle" type="checkbox"></label>
+      <button class="settings-action" id="shortcut-button" type="button">创建桌面快捷方式</button>
+      <p id="shortcut-status">快捷方式尚未创建</p>
+      <p>快捷添加：Ctrl + Alt + T</p>
+    </section>
+    <section class="time-dialog" id="time-dialog" hidden role="dialog" aria-modal="true">
+      <h2>设置任务时间</h2>
+      <p id="time-dialog-task"></p>
+      <label><span>截止时间</span><input id="task-due-input" type="datetime-local"></label>
+      <div class="dialog-actions"><button type="button" id="time-dialog-clear">清除</button><button type="button" id="time-dialog-cancel">取消</button><button type="button" id="time-dialog-save">保存</button></div>
+    </section>
+    <menu class="window-context-menu" id="window-context-menu" hidden>
+      <button type="button" data-mode="top">始终置顶</button>
+      <button type="button" data-mode="desktop">普通窗口层</button>
+      <button type="button" data-mode="opacity">调整透明度</button>
+    </menu>
+
+    <section class="name-dialog" id="name-dialog" hidden aria-modal="true" role="dialog" aria-labelledby="name-dialog-title">
+      <h2 id="name-dialog-title">新建清单</h2>
+      <input id="name-dialog-input" maxlength="40" placeholder="输入名称">
+      <div class="dialog-actions"><button type="button" id="name-dialog-cancel">取消</button><button type="button" id="name-dialog-confirm">确定</button></div>
+    </section>
+    <section class="delete-dialog" id="delete-dialog" hidden aria-modal="true" role="dialog" aria-labelledby="delete-dialog-title">
+      <h2 id="delete-dialog-title">删除项目</h2>
+      <p id="delete-dialog-message"></p>
+      <label><span>任务处理方式</span><select id="delete-dialog-action"></select></label>
+      <div class="dialog-actions"><button type="button" id="delete-dialog-cancel">取消</button><button type="button" id="delete-dialog-confirm">确认删除</button></div>
+    </section>
+    <menu class="list-context-menu" id="list-context-menu" hidden>
+      <button type="button" data-action="rename">重命名清单</button>
+      <button type="button" data-action="delete">删除清单</button>
+    </menu>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

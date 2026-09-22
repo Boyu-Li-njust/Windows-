@@ -1,0 +1,15 @@
+{
+  "name": "desk-todo",
+  "version": "0.1.0",
+  "description": "以任务为核心的本地桌面待办组件",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:debug": "electron . --enable-logging",
+    "test": "node --test",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check src/task-model.js"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  }
+}
