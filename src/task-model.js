@@ -12,7 +12,7 @@ function createDefaultData() {
     version: 1,
     activeListId: DEFAULT_LIST_ID,
     lists: [{ id: DEFAULT_LIST_ID, name: '我的任务' }],
-    groups: [{ id: DEFAULT_GROUP_ID, listId: DEFAULT_LIST_ID, name: '任务' }],
+    groups: [{ id: DEFAULT_GROUP_ID, listId: DEFAULT_LIST_ID, name: '任务', order: 0 }],
     tasks: [],
     trash: []
   };
@@ -35,6 +35,7 @@ function normalizeData(input) {
   const listIds = new Set(lists.map((item) => item.id));
   const groups = Array.isArray(input.groups)
     ? input.groups.filter((item) => item && typeof item.id === 'string' && listIds.has(item.listId))
+      .map((item, index) => ({ ...item, order: Number.isFinite(item.order) ? item.order : index }))
     : [];
   if (groups.length === 0) {
     groups.push({ ...fallback.groups[0], listId: lists[0].id });

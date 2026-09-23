@@ -76,3 +76,16 @@ test('分组新增入口指定目标分组，拖入分组时父子任务一起�
   assert.equal(h.run("state.data.tasks.every(task => task.groupId === 'b')"), true);
   assert.equal(h.run('state.data.tasks[2].parentId === root.id'), true);
 });
+
+test('主任务和子任务可按目标位置重新排序', () => {
+  const h = createHarness();
+  h.run(`
+    const first = addTask('第一项', 'a');
+    const second = addTask('第二项', 'a');
+    const childA = addTask('子项A', 'a', first.id);
+    const childB = addTask('子项B', 'a', first.id);
+    reorderTask(second, first, false);
+    reorderTask(childB, childA, false);
+  `);
+  assert.equal(h.run("JSON.stringify(getOrderedTasks('a').map(task => task.title))"), JSON.stringify(['第二项', '第一项', '子项B', '子项A']));
+});

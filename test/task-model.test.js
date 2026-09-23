@@ -19,6 +19,16 @@ test('损坏的数据会回退到安全默认值', () => {
   assert.deepEqual(data.tasks, []);
 });
 
+test('旧分组数据会补齐可持久化的排序字段', () => {
+  const data = normalizeData({
+    activeListId: 'list',
+    lists: [{ id: 'list', name: '清单' }],
+    groups: [{ id: 'b', listId: 'list', name: 'B' }, { id: 'a', listId: 'list', name: 'A' }],
+    tasks: []
+  });
+  assert.deepEqual(data.groups.map((group) => group.order), [0, 1]);
+});
+
 test('任务按主任务后紧跟子任务的顺序返回', () => {
   const data = createDefaultData();
   const groupId = data.groups[0].id;

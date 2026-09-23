@@ -7,6 +7,7 @@ const state = {
   childEditorParentId: null,
   collapsedTaskIds: new Set(),
   draggedTaskId: null,
+  draggedGroupId: null,
   addGroupId: null,
   compact: false
 };
@@ -83,7 +84,30 @@ function getActiveList() {
  */
 function getActiveGroups() {
   const activeList = getActiveList();
-  return state.data.groups.filter((group) => group.listId === activeList.id);
+  return state.data.groups.filter((group) => group.listId === activeList.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+/** @brief 按当前数组顺序重建指定同级任务的 order，确保拖拽结果可持久化。 */
+function renumberTasks(tasks) {
+  tasks.forEach((task, index) => { task.order = index; });
+}
+
+/**
+ * @brief 将任务插入目标任务前后，并同步父级、分组和同级顺序。
+ * @param dragged 被拖动任务。
+ * @param target 作为插入参照的目标任务。
+ * @param after 是否插入目标之后。
+ */
+function reorderTask(dragged, target, after) {
+  const parentId = target.parentId || null;
+  dragged.groupId = target.groupId;
+  dragged.parentId = parentId;
+  if (!parentId) state.data.tasks.filter((item) => item.parentId === dragged.id).forEach((child) => { child.groupId = target.groupId; });
+  const siblings = state.data.tasks.filter((item) => item.groupId === target.groupId && (item.parentId || null) === parentId && item.id !== dragged.id)
+    .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+  const targetIndex = siblings.findIndex((item) => item.id === target.id);
+  siblings.splice(Math.max(0, targetIndex + (after ? 1 : 0)), 0, dragged);
+  renumberTasks(siblings);
 }
 
 /**
@@ -132,7 +156,11 @@ function addTask(title, groupId, parentId = null) {
  */
 function getOrderedTasks(groupId) {
   const source = state.data.tasks.filter((task) => task.groupId === groupId);
-  const sorter = (a, b) => a.order - b.order || a.createdAt - b.createdAt;
+  const sorter = (a, b) => {
+    // “划线并置底”模式下，主任务和各自的子任务分别按完成状态置底。
+    if (state.settings?.completedBehavior === 'keep' && a.completed !== b.completed) return Number(a.completed) - Number(b.completed);
+    return a.order - b.order || a.createdAt - b.createdAt;
+  };
   const roots = source.filter((task) => !task.parentId).sort(sorter);
   return roots.flatMap((root) => [root, ...source.filter((task) => task.parentId === root.id).sort(sorter)]);
 }
@@ -239,7 +267,18 @@ function renderGroup(group) {
   section.dataset.groupId = group.id;
   const hideCompleted = !state.showCompleted || state.settings.completedBehavior === 'hide';
   const tasks = getOrderedTasks(group.id).filter((task) => !hideCompleted || !task.completed);
-  section.innerHTML = `<header class="group-header"><span class="group-dot"></span><input class="group-name" maxlength="40"><span>${tasks.filter((task) => !task.completed).length}</span></header>`;
+  section.innerHTML = `<header class="group-header"><span class="group-drag" draggable="true" title="拖动调整分组顺序">⠿</span><span class="group-dot"></span><input class="group-name" maxlength="40"><span>${tasks.filter((task) => !task.completed).length}</span></header>`;
+  const groupHandle = section.querySelector('.group-drag');
+  groupHandle.addEventListener('dragstart', (event) => {
+    state.draggedGroupId = group.id;
+    event.dataTransfer.setData('text/plain', group.id);
+    event.dataTransfer.effectAllowed = 'move';
+    section.classList.add('dragging-group');
+  });
+  groupHandle.addEventListener('dragend', () => {
+    state.draggedGroupId = null;
+    section.classList.remove('dragging-group');
+  });
   const nameInput = section.querySelector('.group-name');
   nameInput.value = group.name;
   nameInput.addEventListener('change', () => {
@@ -254,22 +293,42 @@ function renderGroup(group) {
   }, 'icon-button'));
   section.querySelector('.group-header').appendChild(makeAction(`管理分组：${group.name}`, '⋯', () => openDeleteDialog('group', group.id), 'group-menu'));
   section.addEventListener('dragover', (event) => {
+    if (state.draggedGroupId && state.draggedGroupId !== group.id) {
+      event.preventDefault();
+      section.classList.add(event.clientY < section.getBoundingClientRect().top + section.offsetHeight / 2 ? 'drop-before' : 'drop-after');
+      return;
+    }
     if (!state.draggedTaskId) return;
     event.preventDefault();
     section.classList.add('drop-group');
   });
   section.addEventListener('dragleave', (event) => {
-    if (!section.contains(event.relatedTarget)) section.classList.remove('drop-group');
+    if (!section.contains(event.relatedTarget)) section.classList.remove('drop-group', 'drop-before', 'drop-after');
   });
   section.addEventListener('drop', (event) => {
     event.preventDefault();
-    section.classList.remove('drop-group');
+    if (state.draggedGroupId && state.draggedGroupId !== group.id) {
+      const groups = getActiveGroups().filter((item) => item.id !== state.draggedGroupId);
+      const draggedGroup = state.data.groups.find((item) => item.id === state.draggedGroupId);
+      const targetIndex = groups.findIndex((item) => item.id === group.id);
+      const after = event.clientY >= section.getBoundingClientRect().top + section.offsetHeight / 2;
+      groups.splice(targetIndex + (after ? 1 : 0), 0, draggedGroup);
+      groups.forEach((item, index) => { item.order = index; });
+      state.draggedGroupId = null;
+      render();
+      persist();
+      return;
+    }
+    section.classList.remove('drop-group', 'drop-before', 'drop-after');
     const dragged = state.data.tasks.find((item) => item.id === state.draggedTaskId);
     if (!dragged) return;
     dragged.parentId = null;
     dragged.groupId = group.id;
     state.data.tasks.filter((item) => item.parentId === dragged.id).forEach((child) => { child.groupId = group.id; });
-    dragged.order = Math.max(0, ...state.data.tasks.filter((item) => item.groupId === group.id).map((item) => item.order)) + 1;
+    const roots = state.data.tasks.filter((item) => item.groupId === group.id && !item.parentId && item.id !== dragged.id)
+      .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+    roots.push(dragged);
+    renumberTasks(roots);
     render();
     persist();
   });
@@ -424,17 +483,28 @@ function handleTaskKeydown(event, task) {
     }));
     return;
   }
-  if (event.key !== 'Tab') return;
+  if (event.key !== 'Tab' && event.code !== 'Tab') return;
   event.preventDefault();
+  event.stopPropagation();
+  let changed = false;
   if (event.shiftKey && task.parentId) {
     task.parentId = null;
+    changed = true;
   } else if (!event.shiftKey && !task.parentId) {
     const roots = getOrderedTasks(task.groupId).filter((item) => !item.parentId);
     const index = roots.findIndex((item) => item.id === task.id);
-    if (index > 0) task.parentId = roots[index - 1].id;
+    if (index > 0) {
+      task.parentId = roots[index - 1].id;
+      changed = true;
+    }
   }
+  if (!changed) return;
   render();
-  persist();
+  persist().then(() => requestAnimationFrame(() => {
+    const nextInput = document.querySelector(`[data-task-id="${task.id}"] .task-title`);
+    nextInput?.focus();
+    nextInput?.select();
+  }));
 }
 
 /**
@@ -462,22 +532,37 @@ function bindDragEvents(row, task) {
   });
   row.addEventListener('dragover', (event) => {
     const dragged = state.data.tasks.find((item) => item.id === state.draggedTaskId);
-    if (!dragged || dragged.id === task.id || task.parentId) return;
+    if (!dragged || dragged.id === task.id) return;
     event.preventDefault();
-    row.classList.add('drag-over');
+    const bounds = row.getBoundingClientRect();
+    const ratio = bounds.height ? (event.clientY - bounds.top) / bounds.height : 0.5;
+    row.classList.remove('drag-before', 'drag-after', 'drag-over');
+    if (task.parentId || ratio < 0.3) row.classList.add('drag-before');
+    else if (ratio > 0.7) row.classList.add('drag-after');
+    else row.classList.add('drag-over');
   });
-  row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+  row.addEventListener('dragleave', () => row.classList.remove('drag-over', 'drag-before', 'drag-after'));
   row.addEventListener('drop', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    row.classList.remove('drag-over');
+    const makeChild = row.classList.contains('drag-over') && !task.parentId;
+    const after = row.classList.contains('drag-after');
+    row.classList.remove('drag-over', 'drag-before', 'drag-after');
     const dragged = state.data.tasks.find((item) => item.id === state.draggedTaskId);
-    if (!dragged || dragged.id === task.id || task.parentId) return;
-    if (state.data.tasks.some((item) => item.parentId === dragged.id)) {
-      state.data.tasks.filter((item) => item.parentId === dragged.id).forEach((item) => { item.parentId = task.id; item.groupId = task.groupId; });
+    if (!dragged || dragged.id === task.id) return;
+    if (makeChild) {
+      if (state.data.tasks.some((item) => item.parentId === dragged.id)) {
+        state.data.tasks.filter((item) => item.parentId === dragged.id).forEach((item) => { item.parentId = task.id; item.groupId = task.groupId; });
+      }
+      dragged.parentId = task.id;
+      dragged.groupId = task.groupId;
+      const children = state.data.tasks.filter((item) => item.parentId === task.id && item.id !== dragged.id)
+        .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
+      children.push(dragged);
+      renumberTasks(children);
+    } else {
+      reorderTask(dragged, task, after);
     }
-    dragged.parentId = task.id;
-    dragged.groupId = task.groupId;
     render();
     persist();
   });
@@ -520,7 +605,7 @@ function addList() {
   openNameDialog('新建清单', (name) => {
     const listId = makeId('list');
     state.data.lists.push({ id: listId, name: name.trim().slice(0, 40) });
-    state.data.groups.push({ id: makeId('group'), listId, name: '任务' });
+    state.data.groups.push({ id: makeId('group'), listId, name: '任务', order: 0 });
     state.data.activeListId = listId;
     render();
     elements.saveStatus.textContent = `已创建清单：${name.trim()}`;
@@ -823,7 +908,7 @@ elements.windowContextMenu.addEventListener('click', (event) => {
 document.getElementById('hide-button').addEventListener('click', () => window.deskTodo.quit());
 document.getElementById('add-group-button').addEventListener('click', () => {
   openNameDialog('新建分组', (name) => {
-    state.data.groups.push({ id: makeId('group'), listId: getActiveList().id, name: name.trim().slice(0, 40) });
+    state.data.groups.push({ id: makeId('group'), listId: getActiveList().id, name: name.trim().slice(0, 40), order: getActiveGroups().length });
     render();
     elements.saveStatus.textContent = `已创建分组：${name.trim()}`;
     persist();
