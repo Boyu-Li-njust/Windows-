@@ -100,6 +100,7 @@ function applyAlwaysOnTop(enabled) {
  * @param settings 已读取的窗口偏好。
  */
 function createWindow(settings) {
+  const appIcon = path.join(__dirname, 'assets', 'taskbar-icon.ico');
   mainWindow = new BrowserWindow({
     ...getVisibleBounds(settings.bounds),
       minWidth: 64,
@@ -113,6 +114,7 @@ function createWindow(settings) {
     resizable: true,
     hasShadow: false,
     title: '桌面待办',
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -143,7 +145,7 @@ function createWindow(settings) {
  * @brief 创建系统托盘入口，使隐藏窗口仍可快速新增、切换置顶或退出。
  */
 function createTray() {
-  const icon = nativeImage.createFromDataURL('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMjYiIGhlaWdodD0iMjYiIHJ4PSI3IiBmaWxsPSIjNmY2MWQ5Ii8+PHBhdGggZD0iTTkgMTZsNCA0IDEwLTEwIiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==');
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'taskbar-icon.ico'));
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('桌面待办');
   tray.on('click', () => toggleWindow(false));
@@ -174,6 +176,7 @@ function toggleWindow(focusAdd) {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  app.setAppUserModelId('com.desktodo.app');
   const store = await loadStore();
   createWindow(store.settings);
   createTray();
